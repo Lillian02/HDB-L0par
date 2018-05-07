@@ -37,6 +37,14 @@ class Version;
 class VersionSet;
 class ConcurrentWritableFile;
 
+struct ParComp {
+
+  bool operator() (const std::pair<int, int>& A, const std::pair<int, int>& B) {
+    return (A.first == B.first) ? (A.second < B.second) :(A.first > B.first);
+  }
+
+};
+
 // Return the smallest index i such that files[i]->largest >= key.
 // Return files.size() if there is no such file.
 // REQUIRES: "files" contains a sorted list of non-overlapping files.
@@ -161,7 +169,7 @@ class Version {
 
   //3.29 如果用set，虽然能去重，但是会因排序而打乱先后顺序，为了体现每个分区满的先后顺序，用vector，取出时判断size
   //5.4 将结构改为set<pair>,防止多线程时重复选择
-  std::set<std::pair<int,int> > l0_compact_indexes;
+  std::set<std::pair<int,int>, ParComp> l0_compact_indexes;
 
   explicit Version(VersionSet* vset)
       : vset_(vset), next_(this), prev_(this), refs_(0),

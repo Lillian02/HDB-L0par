@@ -1300,11 +1300,19 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
   return result;
 }
 
+//5.7 L0层文件的获取
 void VersionSet::AddLiveFiles(std::set<uint64_t>* live) {
   for (Version* v = dummy_versions_.next_;
        v != &dummy_versions_;
        v = v->next_) {
-    for (unsigned level = 0; level < config::kNumLevels; level++) {
+    //增加L0层文件获取
+    for (unsigned i = 0; i < config::kNumPars; i++){
+      const std::vector<FileMetaData*>& files = v->l0files[i];
+      for(size_t j = 0; j < files.size(); j++){
+        live->insert(files[j]->number);
+      }
+    }
+    for (unsigned level = 1; level < config::kNumLevels; level++) {
       const std::vector<FileMetaData*>& files = v->files_[level];
       for (size_t i = 0; i < files.size(); i++) {
         live->insert(files[i]->number);

@@ -623,8 +623,9 @@ Status DBImpl::WriteL0Table(MemTable* mem, VersionEdit* edit, Version* base){
     mutex_.Unlock();
     //1.29
     par_filemeta.clear();  //3.23
-    //s = BuildTables(dbname_, env_, options_, versions_, table_cache_, iter, metas, pending_outputs_, mutex_);
-    s = BuildTables(dbname_, env_, options_, versions_, table_cache_, iter, par_filemeta, pending_outputs_); 
+    //5.7 添加锁
+    s = BuildTables(dbname_, env_, options_, versions_, table_cache_, iter, par_filemeta, pending_outputs_, &mutex_);
+    //s = BuildTables(dbname_, env_, options_, versions_, table_cache_, iter, par_filemeta, pending_outputs_); 
     mutex_.Lock();
   }
 
@@ -662,7 +663,6 @@ Status DBImpl::WriteL0Table(MemTable* mem, VersionEdit* edit, Version* base){
     }
     
     //pending_outputs_.erase(me.number);
-    
 
   }
 
@@ -672,7 +672,7 @@ Status DBImpl::WriteL0Table(MemTable* mem, VersionEdit* edit, Version* base){
       edit->SetLogNumber(logfile_number_);  // Earlier logs no longer needed
       s = versions_->LogAndApply(edit, &mutex_, &bg_log_cv_, &bg_log_occupied_);
     }
-  
+  //5.7 删除pending中的数据
   for (size_t i = 0; i < par_filemeta.size(); i++){
     FileMetaData me = par_filemeta[i].second;
     pending_outputs_.erase(me.number);
@@ -741,7 +741,7 @@ void DBImpl::CompactMemTableThread() {
     while (!shutting_down_.Acquire_Load() && imm_ == NULL) {
       bg_memtable_cv_.Wait();
     }
-    std::cout << "memtable compaction" <<'\n';
+    //std::cout << "memtable compaction" <<'\n';
     if (shutting_down_.Acquire_Load()) {
       break;
     }
@@ -767,14 +767,11 @@ void DBImpl::CompactMemTableThread() {
       edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
       s = versions_->LogAndApply(&edit, &mutex_, &bg_log_cv_, &bg_log_occupied_);
     }
+    */
 
     //1.31所有生成的L0文件已经在writeL0Table中操作
     //pending_outputs_.erase(number);
-    for (size_t i = 0; i < metas.size(); i++){
-      FileMetaData me = metas[i];
-      pending_outputs_.erase(me.number);
-    }
-    */
+    
     if (s.ok()) {
       // Commit to the new state
       imm_->Unref();
@@ -783,9 +780,9 @@ void DBImpl::CompactMemTableThread() {
       bg_fg_cv_.SignalAll();
       bg_compaction_cv_.Signal();
       //4.3 删除对应的Log
-      DeleteObsoleteLog(cm_logno);
-      cm_logno = 0; //已经删除旧log
-      //DeleteObsoleteFiles();
+      //DeleteObsoleteLog(cm_logno);
+      //cm_logno = 0; //已经删除旧log
+      DeleteObsoleteFiles();    //5.7 改回原来的
     } else {
       RecordBackgroundError(s);
       continue;
@@ -886,7 +883,7 @@ void DBImpl::CompactLevelThread() {
   while (!shutting_down_.Acquire_Load() && !allow_background_activity_) {
     bg_compaction_cv_.Wait();
   }
-  int c_lc = 0;
+  //int c_lc = 0;
   while (!shutting_down_.Acquire_Load()) {
     //这个循环使得level compaction一直在执行
     while (!shutting_down_.Acquire_Load() &&
@@ -921,11 +918,13 @@ void DBImpl::CompactLevelThread() {
       mutex_.Lock();
     }
     //5.1 让compactmemtablethread有机会执行,用sleep的方式有点浪费时间
-    c_lc ++;
+    //c_lc ++;
     if (imm_ != NULL) {
-      std::cout << "imm not null & " << c_lc <<'\n';
+      //std::cout << "imm not null & " << c_lc <<'\n';
       mutex_.Unlock();
-      bg_memtable_cv_.Signal();
+      //bg_memtable_cv_.Signal();
+      int seconds_to_sleep = 1;
+      env_->SleepForMicroseconds(seconds_to_sleep * 1000000);
       mutex_.Lock();
     }
   }
@@ -1015,6 +1014,7 @@ Status DBImpl::BackgroundCompaction() {
     }
     */
    //4.3 删除对应的ldb文件
+   /*
    cl_ldbs.clear();
     for (size_t i = 0; i < 2; ++i) {
       for (size_t j = 0; j < c->num_input_files(i); j++){
@@ -1023,7 +1023,8 @@ Status DBImpl::BackgroundCompaction() {
       }
     }  
     DeleteObsoleteLdb(cl_ldbs);
-    //DeleteObsoleteFiles();
+    */
+    DeleteObsoleteFiles();    //5.7 改回原来的
   }
 
   if (c) {
@@ -1217,15 +1218,18 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       if (!has_current_key ||
           user_comparator()->Compare(ikey.user_key,
                                      current_key.user_key) != 0) {
+        /*
         if (has_current_key && compact->builder &&
             compact->builder->FileSize() >=
             compact->compaction->MinOutputFileSize() &&
             compact->compaction->CrossesBoundary(current_key, ikey, &boundary_hint)) {
+              //5.4 如果删除boundary，会有什么结果？
           status = FinishCompactionOutputFile(compact, input);
           if (!status.ok()) {
             break;
           }
         }
+        */
         // First occurrence of this user key
         current_key_backing.assign(key.data(), key.size());
         bool x = ParseInternalKey(Slice(current_key_backing), &current_key);

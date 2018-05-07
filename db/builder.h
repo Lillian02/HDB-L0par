@@ -41,8 +41,8 @@ extern Status BuildTables(const std::string& dbname,
                          TableCache* table_cache,
                          Iterator* iter,
                          std::vector< std::pair<int, FileMetaData> >& p_fm,
-                         std::set<uint64_t> &pending_outputs);
-                         //port::Mutex &mutex_);
+                         std::set<uint64_t> &pending_outputs,
+                         port::Mutex* mutex_);    //5.7 添加锁
 
 }  // namespace leveldb
 

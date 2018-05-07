@@ -98,8 +98,8 @@ Status BuildTables(const std::string& dbname,
                   TableCache* table_cache,
                   Iterator* iter,
                   std::vector< std::pair<int, FileMetaData> >& p_fm,
-                  std::set<uint64_t> &pending_outputs) {
-                  //port::Mutex &mutex_) {
+                  std::set<uint64_t> &pending_outputs,
+                  port::Mutex* mutex_) {  //5.7 添加锁
   Status s;
 
   iter->SeekToFirst();
@@ -203,6 +203,8 @@ Status BuildTables(const std::string& dbname,
           */
         }
         //3.26 新建文件
+        //5.7 新建文件时带上锁
+        mutex_->Lock();
         meta.number = versions->NewFileNumber();          
         meta.file_size = 0;
         meta.smallest.DecodeFrom(key);
@@ -211,6 +213,7 @@ Status BuildTables(const std::string& dbname,
         //mutex_.Lock();
         pending_outputs.insert(meta.number);
         //mutex_.Unlock();
+        mutex_->Unlock();    //5.7 解锁
         fname = TableFileName(dbname, meta.number);
         s = env->NewWritableFile(fname, &file);
         if (!s.ok()) {
